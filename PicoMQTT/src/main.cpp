@@ -28,6 +28,9 @@
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
+unsigned long last_pub_time = 0;
+int counter = 0;
+
 PicoMQTT::Server mqtt;
 
 void setup() {
@@ -53,21 +56,25 @@ void setup() {
     display.setTextSize(1);
     display.setCursor(0,0);
 
-    //Display text
-    display.print("MQTT Broker");
-    display.display();
-    
     // Connect to WiFi
-    Serial.printf("Connecting to WiFi %s\n", WIFI_SSID);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     while (WiFi.status() != WL_CONNECTED) { delay(1000); }
-    Serial.printf("WiFi connected, IP: %s\n", WiFi.localIP().toString().c_str());
-    //Serial.printf("Port %d\n", mqtt.getPort());
 
+    //Display text
+    display.print("MQTT Broker\n");
+    display.printf("WiFi %s\n", WIFI_SSID);
+    display.printf("IP: %s\n", WiFi.localIP().toString().c_str());
+    display.display();
+    
     mqtt.begin();
 }
 
 void loop() {
     mqtt.loop();
+
+    if(millis() - last_pub_time > 10000){
+        last_pub_time = millis();
+        mqtt.publish("test/topic", "Hello World! %d", counter++);
+    }
 }
