@@ -20,20 +20,35 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 DHT dht(DHTPIN, DHTTYPE);
 
 // WiFi Settings
-const char* WIFI_SSID = "ESP32";
-const char* WIFI_PASSWORD = "12345678";
+const char* WIFI_SSID = "MQTT-Broker";
+const char* WIFI_PASSWORD = "1234";
 
 // Publish Settings
 unsigned long last_publish_time = 0;
-int greeting_number = 1;
 
 // MQTT Settings
-PicoMQTT :: Server mqtt(1818);
+PicoMQTT :: Client client("192.168.4.1", 1818);
+
+void OledDisplay(String topic, String payload){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.println(topic);
+  display.println(payload);
+  display.display();
+}
 
 void setup() {
   // Setup serial
   Serial.begin(9600);
   Serial.println("Starting...");
+
+  // Setup WiFi
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
 
   // Setup OLED
   pinMode(OLED_RST, OUTPUT);
@@ -57,25 +72,21 @@ void setup() {
   // Setup DHT
   dht.begin();
 
-  // Setup WiFi
-  WiFi.mode(WIFI_AP);
-  WiFi.softAP(WIFI_SSID, NULL);
-
-  //Display text
-  display.print("MQTT Broker\n");
-  display.printf("WiFi %s\n", WIFI_SSID);
-  display.printf("IP: %s\n", WiFi.softAPIP().toString().c_str());
-  display.display();
+  // Subscribe to a topic pattern and attach a callback
+  client.subscribe("#", [](const char * topic, const char * payload) {
+      Serial.printf("Received message in topic '%s': %s\n", topic, payload);
+      OledDisplay(topic, payload);
+  });
 
   // Setup MQTT Broker
-  mqtt.begin();
-
+  client.begin();
 }
 
 void loop() {
-  mqtt.loop();
+  client.loop();
 
-  if(millis() - last_publish_time > 10000){
+  // Send DHT data to MQTT Broker
+  if(millis() - last_publish_time > 5000){
 
     // Reading temperature or humidity
     float h = dht.readHumidity();
@@ -90,16 +101,10 @@ void loop() {
     // Compute heat index in Celsius
     float hic = dht.computeHeatIndex(t, h, false);
 
-    // Publish to MQTT
+    // Publish a message to a topic
+    client.publish("topic/temperature", String(t).c_str());
+    client.publish("topic/humidity", String(h).c_str());
+
     last_publish_time = millis();
-    String topic = "esp32/temperature";
-    String payload = String(t);
-    mqtt.publish(topic, payload);
-    
 
-    Serial.print(F("Temperature: "));
-    Serial.println(t);
-
-
-  }
 }
