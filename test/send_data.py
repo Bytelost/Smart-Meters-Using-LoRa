@@ -8,5 +8,5 @@ except Exception as e:
     print(f"Failed to connect: {str(e)}")
     exit(1)
     
-client.publish("test/broker", "Hello world!")
+client.publish("topic/temperature", "Hello World!")
 client.disconnect()
