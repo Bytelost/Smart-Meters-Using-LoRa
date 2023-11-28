@@ -44,7 +44,7 @@ void setup() {
 
   // Setup WiFi
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(WIFI_SSID, NULL);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
@@ -73,7 +73,7 @@ void setup() {
   dht.begin();
 
   // Subscribe to a topic pattern and attach a callback
-  client.subscribe("#", [](const char * topic, const char * payload) {
+  client.subscribe("topic/temperature", [](const char * topic, const char * payload) {
       Serial.printf("Received message in topic '%s': %s\n", topic, payload);
       OledDisplay(topic, payload);
   });
@@ -82,29 +82,19 @@ void setup() {
   client.begin();
 }
 
-void loop() {
+void loop(){
   client.loop();
 
-  // Send DHT data to MQTT Broker
-  if(millis() - last_publish_time > 5000){
-
-    // Reading temperature or humidity
-    float h = dht.readHumidity();
-    float t = dht.readTemperature();
-
-    // Check if any reads failed and exit early (to try again).
-    if (isnan(h) || isnan(t) ) {
-      Serial.println(F("Failed to read from DHT sensor!"));
+  // Publish a message every 5 seconds
+  if (millis() - last_publish_time > 10000) {
+    last_publish_time = millis();
+    float temperature = dht.readTemperature();
+    float humidity = dht.readHumidity();
+    if (isnan(temperature) || isnan(humidity)) {
+      Serial.println("Failed to read from DHT sensor!");
       return;
     }
-
-    // Compute heat index in Celsius
-    float hic = dht.computeHeatIndex(t, h, false);
-
-    // Publish a message to a topic
-    client.publish("topic/temperature", String(t).c_str());
-    client.publish("topic/humidity", String(h).c_str());
-
-    last_publish_time = millis();
-
+    client.publish("topic/temperature", String(temperature).c_str());
+    client.publish("topic/humidity", String(humidity).c_str());
+  }
 }

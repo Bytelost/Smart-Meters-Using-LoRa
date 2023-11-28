@@ -44,7 +44,7 @@ void setup() {
 
   // WiFi Setup
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssid, password);
+  WiFi.softAP(ssid, NULL);
 
   //Display text
   display.print("MQTT Broker\n");
