@@ -15,7 +15,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
 // WiFi Settings
 const char* WIFI_SSID = "Standalone-Broker";
-const char* WIFI_PASSWORD = "1234";
+const char* WIFI_PASSWORD = "123456789";
 
 // Loop variables
 unsigned int update_time = 0;
@@ -30,14 +30,14 @@ void OledClear() {
   display.setCursor(0,0);
 }
 
-void showHostNum(){
-  int num = WiFi.softAPgetStationNum();
+void ShowMsg() {
   OledClear();
-  display.println("Standalone-Broker");
-  display.print("IP:");
-  display.println(WiFi.softAPIP());
-  display.print("Hosts:");
-  display.println(num);
+  int num = WiFi.softAPgetStationNum();
+  display.print("Standalone-Broker\n");
+  display.printf("IP: %s\n", WiFi.softAPIP().toString().c_str());
+  display.printf("PORT: 1818\n");
+  display.printf("Clients: %d\n", num);
+  display.display();
 }
 
 void setup() {
@@ -47,7 +47,13 @@ void setup() {
   
   // Setup WiFi
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.softAP(WIFI_SSID, NULL);
+
+  // Setup OLED
+  pinMode(OLED_RST, OUTPUT);
+  digitalWrite(OLED_RST, LOW);
+  delay(20);
+  digitalWrite(OLED_RST, HIGH);
 
   // Initialize the OLED display using Wire library
   Wire.begin(OLED_SDA, OLED_SCL);
@@ -55,6 +61,9 @@ void setup() {
       Serial.println(F("SSD1306 allocation failed"));
       for(;;); // Don't proceed, loop forever
   }
+
+  //Display text
+  ShowMsg();  
 
   // Subscribe to MQTT topics
   mqtt.subscribe("topic/message", [](const char * topic, const char * payload) {
@@ -66,11 +75,11 @@ void setup() {
 
 void loop() {
   mqtt.loop();
-  
-  // Update OLED every 10 seconds
-  if(millis() - update_time < 10000){
+
+  // Update OLED every 5 seconds
+  if (millis() - update_time > 5000) {
     update_time = millis();
-    showHostNum();
+    ShowMsg();
   }
 
 }
