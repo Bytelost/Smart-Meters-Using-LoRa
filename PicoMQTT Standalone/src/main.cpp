@@ -25,14 +25,14 @@ void setupLoRaWAN();
 #define FILLMEIN (#dont edit this, edit the lines that use FILLMEIN)
 #endif
 
-// LoRaWAN NwkSKey, network session key
-static const PROGMEM u1_t NWKSKEY[16] = {0xED, 0x4D, 0xD7, 0x9F, 0x67, 0x2A, 0x23, 0xCF, 0x99, 0xD6, 0xC5, 0x89, 0x3E, 0x46, 0xE5, 0x19};
+// LoRaWAN NwkSKey, network session key (MSB)
+static const PROGMEM u1_t NWKSKEY[16] = {0x67, 0xFC, 0x08, 0xB1, 0x6A, 0xDB, 0x15, 0x7A, 0xEF, 0x3C, 0x1D, 0x9B, 0x8A, 0x38, 0x58, 0x99};
 
-// LoRaWAN AppSKey, application session key
-static const u1_t PROGMEM APPSKEY[16] = {0x56, 0x71, 0xB9, 0x07, 0x15, 0xD0, 0xA7, 0xA3, 0x5C, 0xEF, 0x05, 0x51, 0x03, 0xE9, 0xE1, 0x9D};
+// LoRaWAN AppSKey, application session key (MSB)
+static const u1_t PROGMEM APPSKEY[16] = {0x0B, 0x08, 0x62, 0x85, 0xA7, 0x1A, 0x01, 0xCF, 0xBB, 0x32, 0x78, 0x13, 0xB5, 0x2E, 0xA4, 0x5D};
 
 // LoRaWAN end-device address (DevAddr)
-static const u4_t DEVADDR = 0x260DDE71; 
+static const u4_t DEVADDR = 0x260DF4AB; 
 
 // Only used for OTTA activation
 void os_getArtEui (u1_t* buf) { }
@@ -42,7 +42,6 @@ void os_getDevKey (u1_t* buf) { }
 // Message to send
 char tempString[16];
 static uint8_t txBuffer[9];
-
 
 static osjob_t sendjob;
 
@@ -118,6 +117,8 @@ void setup() {
 void loop() {
   mqtt.loop();
 
+  os_runloop_once();
+
   // Update OLED every 5 seconds
   if (millis() - update_time > 5000) {
     update_time = millis();
@@ -161,7 +162,6 @@ void printHex2(unsigned v) {
   Serial.print(v, HEX);
 }
 
-// LoRaWAN event handler
 void onEvent (ev_t ev) {
   Serial.print(os_getTime());
   Serial.print(": ");
@@ -253,18 +253,22 @@ void do_send(osjob_t* j) {
     //LoraStatus = "OP_TXRXPEND, not sending";
   }
   else
-  {       
-    buildPacket(txBuffer);
-    
-    LMIC_setTxData2(1, txBuffer, sizeof(txBuffer), 0);
-    Serial.println(F("Packet queued"));
-    //LoraStatus = "Packet queued";
+  { 
+      //led.clear();
+      //led.drawString(0,0,"fake packet");      
+      buildPacket(txBuffer);
+      
+      LMIC_setTxData2(1, txBuffer, sizeof(txBuffer), 0);
+      Serial.println(F("Packet queued"));
+      //LoraStatus = "Packet queued";
   }
   // Next TX is scheduled after TX_COMPLETE event.
 }
 
-// LoRaWAN Setup
-void setupLoRaWAN(){
+
+void setupLoRaWAN()
+{
+  
   // LMIC init
   os_init();
   // Reset the MAC state. Session and pending data transfers will be discarded.
@@ -354,6 +358,7 @@ void setupLoRaWAN(){
 
   // Set data rate and transmit power for uplink
   LMIC_setDrTxpow(DR_SF10, LORA_GAIN);
+
 
   // Start job
   do_send(&sendjob);
