@@ -40,8 +40,7 @@ void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
 
 // Message to send
-char tempString[16];
-static uint8_t txBuffer[9];
+static uint8_t txBuffer[12] = "Hello World";
 
 static osjob_t sendjob;
 
@@ -65,24 +64,49 @@ const lmic_pinmap lmic_pins = {
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
 // WiFi Settings
-const char* WIFI_SSID = "Standalone-Broker";
-const char* WIFI_PASSWORD = "123456789ac";
+const char* WIFI_SSID = "Heltec-Broker";
+const char* WIFI_PASSWORD = "senhaforte123";
 
 // Loop variables
 unsigned int update_time = 0;
 uint8_t counter = 0;
 
 // MQTT Settings
-PicoMQTT :: Server mqtt(1818);
+class MQTT: public PicoMQTT::Server{
+    protected:
+        PicoMQTT::ConnectReturnCode auth(const char * client_id, const char * username, const char * password) override {
+            // only accept client IDs which are 3 chars or longer
+            if (String(client_id).length() < 3) {    // client_id is never NULL
+                return PicoMQTT::CRC_IDENTIFIER_REJECTED;
+            }
+
+            // only accept connections if username and password are provided
+            if (!username || !password) {  // username and password can be NULL
+                // no username or password supplied
+                return PicoMQTT::CRC_NOT_AUTHORIZED;
+            }
+
+            // accept two user/password combinations
+            if (
+                ((String(username) == "alice") && (String(password) == "secret"))
+                || ((String(username) == "bob") && (String(password) == "password"))) {
+                return PicoMQTT::CRC_ACCEPTED;
+            }
+
+            // reject all other credentials
+            return PicoMQTT::CRC_BAD_USERNAME_OR_PASSWORD;
+        }
+}mqtt;
 
 void setup() {
   // Setup serial
-  Serial.begin(115200);
+  Serial.begin(9600);
   Serial.println("Starting...");
   
   // Setup WiFi
+  WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(WIFI_SSID, NULL);
+  WiFi.softAP(WIFI_SSID, WIFI_PASSWORD);
 
   // Setup LoRa
   setupLoRaWAN();
@@ -104,7 +128,7 @@ void setup() {
   ShowMsg();  
 
   // Subscribe to MQTT topics
-  mqtt.subscribe("topic/message", [](const char * topic, const char * payload) {
+  mqtt.subscribe("#/", [](const char * topic, const char * payload) {
       Serial.printf("Received message in topic '%s': %s\n", topic, payload);
       
   });
@@ -132,17 +156,6 @@ void OledClear() {
   display.setTextColor(WHITE);
   display.setTextSize(1);
   display.setCursor(0,0);
-}
-
-void buildPacket(uint8_t txBuffer[9])
-{
-  
-  txBuffer[0] = tempString[0]; 
-  txBuffer[1] = tempString[1];
-  txBuffer[2] = tempString[2];
-  txBuffer[3] = tempString[3];
-  txBuffer[4] = tempString[4];
-
 }
 
 void ShowMsg() {
@@ -249,17 +262,13 @@ void do_send(osjob_t* j) {
   // Check if there is not a current TX/RX job running
   if (LMIC.opmode & OP_TXRXPEND)
   {
-    Serial.println(F("OP_TXRXPEND, not sending"));
     //LoraStatus = "OP_TXRXPEND, not sending";
   }
   else
   { 
-      //led.clear();
-      //led.drawString(0,0,"fake packet");      
-      buildPacket(txBuffer);
-      
+      // Send Message 
       LMIC_setTxData2(1, txBuffer, sizeof(txBuffer), 0);
-      Serial.println(F("Packet queued"));
+      Serial.println("Packet queued");
       //LoraStatus = "Packet queued";
   }
   // Next TX is scheduled after TX_COMPLETE event.
