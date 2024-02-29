@@ -5,6 +5,9 @@
 #include <Wire.h>
 #include <WiFi.h>
 
+void OledClear();
+void ShowMsg();
+
 //OLED Settings
 #define OLED_SDA 4
 #define OLED_SCL 15 
@@ -15,10 +18,38 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RST);
 
 // WiFi Settings
 const char* ssid = "MQTT-Broker";
-const char* password = "1234";
+const char* password = "senhaforte123";
+
+// Loop variables
+unsigned int update_time = 0;
+uint8_t counter = 0;
 
 // MQTT Settings
-PicoMQTT :: Server server(1818);
+class MQTT: public PicoMQTT::Server{
+    protected:
+        PicoMQTT::ConnectReturnCode auth(const char * client_id, const char * username, const char * password) override {
+            // only accept client IDs which are 3 chars or longer
+            if (String(client_id).length() < 3) {    // client_id is never NULL
+                return PicoMQTT::CRC_IDENTIFIER_REJECTED;
+            }
+
+            // only accept connections if username and password are provided
+            if (!username || !password) {  // username and password can be NULL
+                // no username or password supplied
+                return PicoMQTT::CRC_NOT_AUTHORIZED;
+            }
+
+            // accept two user/password combinations
+            if (
+                ((String(username) == "alice") && (String(password) == "secret"))
+                || ((String(username) == "bob") && (String(password) == "password"))) {
+                return PicoMQTT::CRC_ACCEPTED;
+            }
+
+            // reject all other credentials
+            return PicoMQTT::CRC_BAD_USERNAME_OR_PASSWORD;
+        }
+}mqtt;
 
 void setup() {
   Serial.begin(9600);
@@ -44,23 +75,35 @@ void setup() {
 
   // WiFi Setup
   WiFi.mode(WIFI_AP);
-  WiFi.softAP(ssid, NULL);
-
-  //Display text
-  display.print("MQTT Broker\n");
-  display.printf("WiFi %s\n", ssid);
-  display.printf("IP: %s\n", WiFi.softAPIP().toString().c_str());
-  display.display();
-
-  // Subscribe to a topic pattern and attach a callback
-  server.subscribe("#", [](const char * topic, const char * payload) {
-      Serial.printf("Received message in topic '%s': %s\n", topic, payload);
-  });
+  WiFi.softAP(ssid, password);
 
   // MQTT Setup
-  server.begin();
+  mqtt.begin();
 }
 
 void loop() {
-  server.loop();
+  mqtt.loop();
+
+  // Update OLED every 5 seconds
+  if (millis() - update_time > 5000) {
+    update_time = millis();
+    ShowMsg();
+  }
+}
+
+void OledClear() {
+  display.clearDisplay();
+  display.setTextColor(WHITE);
+  display.setTextSize(1);
+  display.setCursor(0,0);
+}
+
+void ShowMsg() {
+  OledClear();
+  int num = WiFi.softAPgetStationNum();
+  display.print("MQTT-Broker\n");
+  display.printf("IP: %s\n", WiFi.softAPIP().toString().c_str());
+  display.printf("PORT: 1883\n");
+  display.printf("Clients: %d\n", num);
+  display.display();
 }
