@@ -43,12 +43,14 @@ void os_getDevKey (u1_t* buf) { }
 
 // Lora variables
 std::vector<uint8_t> uint8Array;             // Message to send
-const int arraySize = 9;                     // Number of messages
+uint8_t data_buffer[160];                    // Data buffer
+const int arraySize = 12;                    // Number of messages
 const char* messageQueue[arraySize];         // Message queue
 static osjob_t sendjob;                      // Send job
-const unsigned TX_INTERVAL = 30;             // Interval between messages
+const unsigned TX_INTERVAL = 6;              // Interval between messages
 int msg_count = 0;                           // Counter
-bool flag = false;                           // Flag to check if the message was sent
+int msg_send = 0;                            // Counter           
+int aux = 0;                                 // Auxiliar counter
 
 // Pin map
 const lmic_pinmap lmic_pins = {
@@ -72,11 +74,11 @@ const char* WIFI_PASSWORD = "senhaforte123";
 
 // MQTT Settings
 PicoMQTT::Client mqtt(
-    "192.168.4.1",          // broker address (or IP)
-    1883,                   // broker port (defaults to 1883)
-    "esp-client",           // Client ID
-    "bob",                  // MQTT username
-    "password"              // MQTT password
+  "192.168.4.1",          // broker address (or IP)
+  1883,                   // broker port (defaults to 1883)
+  "esp-client",           // Client ID
+  "bob",                  // MQTT username
+  "password"              // MQTT password
 );
 
 // Setup function
@@ -112,10 +114,23 @@ void setup() {
   // Subscribe to MQTT topics
   mqtt.subscribe("#", [](const char * topic, const char * payload) {
 
-    messageQueue[msg_count] = payload;
+    // Put the message in the queue
+    messageQueue[msg_count] = (char*)malloc(strlen(payload) + 1);
+    if(messageQueue[msg_count] != nullptr) {
+      messageQueue[msg_count] = strdup(payload);
+    }
+    //Serial.printf("%s\n", messageQueue[msg_count]);
+
     msg_count++;
 
-      
+    // Restore the counter if it reaches the array size
+    if(msg_count == arraySize) {
+      msg_count = 0;
+    }
+
+    aux++;
+    Serial.println(aux);
+    
   });
 
   // Start mqtt broker
@@ -127,6 +142,36 @@ void setup() {
 void loop() {
   mqtt.loop();
   os_runloop_once();
+
+}
+
+// Check if the message queue is empty
+bool isMessageQueueEmpty(const char* messageQueue[], size_t arraySize) {
+  for (size_t i = 0; i < arraySize; ++i) {
+    if (messageQueue[i] != nullptr && messageQueue[i][0] != '\0') {
+      // Found a non-empty element
+      return false;
+    }
+  }
+  // All elements are either nullptr or empty
+  return true;
+}
+
+// Build the packet
+void buildPacket() {
+
+  // Get the message
+  for(int i=0; i<strlen(messageQueue[msg_send]); i++) {
+    data_buffer[i] = messageQueue[msg_send][i];
+  }
+
+  // Increasse the counter
+  msg_send++;
+
+  // Resset the counter if it reaches the array size
+  if(msg_send == arraySize) {
+    msg_send = 0;
+  }
 
 }
 
@@ -224,26 +269,20 @@ void onEvent (ev_t ev) {
 
 // Send function
 void do_send(osjob_t* j) {
+  
+  // Check if there is not a current TX/RX job running
+  if (!(LMIC.opmode & OP_TXRXPEND)) {
 
-  // Iterate through the message queue
-  for(int i = 0; i < arraySize; i++) {
-    // Check if there is not a current TX/RX job running
-    if (!(LMIC.opmode & OP_TXRXPEND)) {
-      // Prepare upstream data transmission at the next possible time
-      const char* message = messageQueue[i];
-      size_t payloadStr = std::strlen(message);
-      std::vector<uint8_t> uint8Array;
-      
-      for (size_t i = 0; i < payloadStr; i++) {
-        uint8Array.push_back(message[i]);
-      }
-
-      // Send Message 
-      LMIC_setTxData2(1, uint8Array.data(), uint8Array.size(), 0);
-
-      if(flag)
-        Serial.println("Packet queued");
+    // Check if the message queue is empty
+    if(!isMessageQueueEmpty(messageQueue, arraySize)) {
+      buildPacket();
     }
+
+    // Send Message
+    //Serial.println("Packet queuing...");
+    //Serial.println((char*)data_buffer);
+    LMIC_setTxData2(1, data_buffer, sizeof(data_buffer), 0);
+    Serial.println("Packet queued");
     // Next TX is scheduled after TX_COMPLETE event.
   }
 }
