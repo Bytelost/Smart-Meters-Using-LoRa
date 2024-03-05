@@ -18,6 +18,7 @@ void do_send(osjob_t* j);
 void buildPacket(uint8_t *txBuffer);
 void ShowMsg();
 void setupLoRaWAN();
+void OledClear();
 
 // Compile Regression Settings
 #ifdef COMPILE_REGRESSION_TEST
@@ -42,15 +43,22 @@ void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
 
 // Lora variables
-std::vector<uint8_t> uint8Array;             // Message to send
-uint8_t data_buffer[160];                    // Data buffer
-const int arraySize = 12;                    // Number of messages
-const char* messageQueue[arraySize];         // Message queue
 static osjob_t sendjob;                      // Send job
-const unsigned TX_INTERVAL = 6;              // Interval between messages
-int msg_count = 0;                           // Counter
-int msg_send = 0;                            // Counter           
-int aux = 0;                                 // Auxiliar counter
+const int buffer_size = 160;
+uint8_t data_buffer[buffer_size];            // Data buffer
+const unsigned TX_INTERVAL = 10;             // Interval between messages
+int msg_send_Data = 0;                       // Counter
+int msg_send_Eny = 0;                        // Counter
+bool flag = false;
+
+// MQTT variables
+const int arraySize_Data = 9;                          // Number of messages for Data topic
+const char* messageQueue_Data[arraySize_Data];         // Message queue
+int msg_recived_Data = 0;                              // Counter
+const int arraySize_Eny = 11;                          // Number of messages for Eny topic
+const char* messageQueue_Eny[arraySize_Eny];           // Message queue
+int msg_recived_Eny = 0;                               // Counter
+
 
 // Pin map
 const lmic_pinmap lmic_pins = {
@@ -111,31 +119,53 @@ void setup() {
       for(;;); // Don't proceed, loop forever
   } 
 
-  // Subscribe to MQTT topics
+  // Subscribe to all topics
   mqtt.subscribe("#", [](const char * topic, const char * payload) {
 
-    // Put the message in the queue
-    messageQueue[msg_count] = (char*)malloc(strlen(payload) + 1);
-    if(messageQueue[msg_count] != nullptr) {
-      messageQueue[msg_count] = strdup(payload);
-    }
-    //Serial.printf("%s\n", messageQueue[msg_count]);
+    Serial.println(topic);
 
-    msg_count++;
+    // Recive the first 9 packets
+    if((strcmp(topic, "MQTT_RT_DATA") == 0) || (strcmp(topic, "MQTT_TELEIND") == 0)){
 
-    // Restore the counter if it reaches the array size
-    if(msg_count == arraySize) {
-      msg_count = 0;
-    }
+      // New data from MQTT_RT_DATA, ENY stop sending
+      flag = false;
 
-    aux++;
-    Serial.println(aux);
+      // Put the message in the queue
+      messageQueue_Data[msg_recived_Data] = (char*)malloc(strlen(payload) + 1);
+      if(messageQueue_Data[msg_recived_Data] != nullptr) {
+        messageQueue_Data[msg_recived_Data] = strdup(payload);
+      }
+
+      // Increase the counter on message received
+      msg_recived_Data++;
+
+      // Reset the queue to the begin
+      if(msg_recived_Data == arraySize_Data){
+        msg_recived_Data = 0;
+      }
     
+    // Recive the rest
+    }else if (strcmp(topic, "MQTT_ENY_NOW") == 0){
+
+      // Put message in the queue
+      messageQueue_Eny[msg_recived_Eny] = (char*)malloc(strlen(payload) + 1);
+      if(messageQueue_Eny[msg_recived_Eny] != nullptr){
+        messageQueue_Eny[msg_recived_Eny] = strdup(payload);
+      }
+
+      // Increasse queue counter
+      msg_recived_Eny++;
+
+      // Reset the queue
+      if(msg_recived_Eny == arraySize_Eny){
+        msg_recived_Eny == 0;
+      }
+    }
+      
   });
 
   // Start mqtt broker
   mqtt.begin();
-
 }
 
 // Main loop
@@ -149,28 +179,48 @@ void loop() {
 bool isMessageQueueEmpty(const char* messageQueue[], size_t arraySize) {
   for (size_t i = 0; i < arraySize; ++i) {
     if (messageQueue[i] != nullptr && messageQueue[i][0] != '\0') {
-      // Found a non-empty element
       return false;
     }
   }
-  // All elements are either nullptr or empty
   return true;
 }
 
 // Build the packet
 void buildPacket() {
 
-  // Get the message
-  for(int i=0; i<strlen(messageQueue[msg_send]); i++) {
-    data_buffer[i] = messageQueue[msg_send][i];
-  }
+  // Processe the Data queue
+  if(!flag){
+    // Get the message
+    for(int i=0; i<strlen(messageQueue_Data[msg_send_Data]); i++) {
+      data_buffer[i] = messageQueue_Data[msg_send_Data][i];
+    }
 
-  // Increasse the counter
-  msg_send++;
+    // Increasse the counter
+    msg_send_Data++;
 
-  // Resset the counter if it reaches the array size
-  if(msg_send == arraySize) {
-    msg_send = 0;
+    // Resset the counter if it reaches the array size
+    if(msg_send_Data == arraySize_Data) {
+      msg_send_Data = 0;
+      flag = true;
+    }
+
+    // Process the ENY queue
+  } else if(flag && !(isMessageQueueEmpty(messageQueue_Eny, arraySize_Eny))){
+
+      Serial.println("20 mensagens");
+      
+      // Get the message
+      for(int i=0; i<strlen(messageQueue_Eny[msg_send_Eny]); i++){
+        data_buffer[i] = messageQueue_Eny[msg_send_Eny][i];
+      }
+
+      // Increasse the counter
+      msg_send_Eny++;
+
+      if(msg_send_Eny == arraySize_Eny){
+        msg_send_Eny = 0;
+        flag = false;
+      }
   }
 
 }
@@ -213,7 +263,7 @@ void onEvent (ev_t ev) {
       Serial.println(F("EV_REJOIN_FAILED"));
       break;
     case EV_TXCOMPLETE:
-      Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
+      //Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
       if (LMIC.txrxFlags & TXRX_ACK)
         Serial.println(F("Received ack"));
       if (LMIC.dataLen) {
@@ -249,7 +299,7 @@ void onEvent (ev_t ev) {
       ||    break;
     */
     case EV_TXSTART:
-      Serial.println(F("EV_TXSTART"));
+      //Serial.println(F("EV_TXSTART"));
       break;
     case EV_TXCANCELED:
       Serial.println(F("EV_TXCANCELED"));
@@ -274,16 +324,17 @@ void do_send(osjob_t* j) {
   if (!(LMIC.opmode & OP_TXRXPEND)) {
 
     // Check if the message queue is empty
-    if(!isMessageQueueEmpty(messageQueue, arraySize)) {
+    if((!isMessageQueueEmpty(messageQueue_Data, arraySize_Data))){
       buildPacket();
     }
 
     // Send Message
-    //Serial.println("Packet queuing...");
-    //Serial.println((char*)data_buffer);
+    Serial.println((char*)data_buffer);
     LMIC_setTxData2(1, data_buffer, sizeof(data_buffer), 0);
     Serial.println("Packet queued");
-    // Next TX is scheduled after TX_COMPLETE event.
+    
+    // Clear the array
+    std::fill_n(data_buffer, buffer_size, NULL);
   }
 }
 
