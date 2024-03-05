@@ -44,7 +44,7 @@ void os_getDevKey (u1_t* buf) { }
 
 // Lora variables
 static osjob_t sendjob;                      // Send job
-const int buffer_size = 160;
+const int buffer_size = 160;                 // Buffer size
 uint8_t data_buffer[buffer_size];            // Data buffer
 const unsigned TX_INTERVAL = 10;             // Interval between messages
 int msg_send_Data = 0;                       // Counter
@@ -127,9 +127,6 @@ void setup() {
     // Recive the first 9 packets
     if((strcmp(topic, "MQTT_RT_DATA") == 0) || (strcmp(topic, "MQTT_TELEIND") == 0)){
 
-      // New data from MQTT_RT_DATA, ENY stop sending
-      flag = false;
-
       // Put the message in the queue
       messageQueue_Data[msg_recived_Data] = (char*)malloc(strlen(payload) + 1);
       if(messageQueue_Data[msg_recived_Data] != nullptr) {
@@ -186,43 +183,48 @@ bool isMessageQueueEmpty(const char* messageQueue[], size_t arraySize) {
 }
 
 // Build the packet
-void buildPacket() {
+void buildPacket_DATA() {
 
-  // Processe the Data queue
-  if(!flag){
-    // Get the message
-    for(int i=0; i<strlen(messageQueue_Data[msg_send_Data]); i++) {
-      data_buffer[i] = messageQueue_Data[msg_send_Data][i];
-    }
+  Serial.println("DATA");
 
-    // Increasse the counter
-    msg_send_Data++;
-
-    // Resset the counter if it reaches the array size
-    if(msg_send_Data == arraySize_Data) {
-      msg_send_Data = 0;
-      flag = true;
-    }
-
-    // Process the ENY queue
-  } else if(flag && !(isMessageQueueEmpty(messageQueue_Eny, arraySize_Eny))){
-
-      Serial.println("20 mensagens");
-      
-      // Get the message
-      for(int i=0; i<strlen(messageQueue_Eny[msg_send_Eny]); i++){
-        data_buffer[i] = messageQueue_Eny[msg_send_Eny][i];
-      }
-
-      // Increasse the counter
-      msg_send_Eny++;
-
-      if(msg_send_Eny == arraySize_Eny){
-        msg_send_Eny = 0;
-        flag = false;
-      }
+  // Get the message
+  for(int i=0; i<strlen(messageQueue_Data[msg_send_Data]); i++) {
+    data_buffer[i] = messageQueue_Data[msg_send_Data][i];
   }
 
+  // Free the memory
+  free((void*)messageQueue_Data[msg_send_Data]);
+  messageQueue_Data[msg_send_Data] = nullptr;
+
+  // Increasse the counter
+  msg_send_Data++;
+
+  // Resset the counter if it reaches the array size
+  if(msg_send_Data == arraySize_Data) {
+    msg_send_Data = 0;
+  }
+
+}
+
+void buildPacket_ENY(){
+
+  Serial.println("ENY");
+  
+  // Get the message
+  for(int i=0; i<strlen(messageQueue_Eny[msg_send_Eny]); i++){
+    data_buffer[i] = messageQueue_Eny[msg_send_Eny][i];
+  }
+
+  // Free the memory
+  free((void*)messageQueue_Eny[msg_send_Eny]);
+  messageQueue_Eny[msg_send_Eny] = nullptr;
+
+  // Increasse the counter
+  msg_send_Eny++;
+
+  if(msg_send_Eny == arraySize_Eny){
+    msg_send_Eny = 0;
+  }
 }
 
 // Clear OLED
@@ -325,7 +327,10 @@ void do_send(osjob_t* j) {
 
     // Check if the message queue is empty
     if((!isMessageQueueEmpty(messageQueue_Data, arraySize_Data))){
-      buildPacket();
+      buildPacket_DATA();
+
+    }else if(!isMessageQueueEmpty(messageQueue_Eny, arraySize_Eny)){
+      buildPacket_ENY();
     }
 
     // Send Message
@@ -333,8 +338,8 @@ void do_send(osjob_t* j) {
     LMIC_setTxData2(1, data_buffer, sizeof(data_buffer), 0);
     Serial.println("Packet queued");
     
-    // Clear the array
-    std::fill_n(data_buffer, buffer_size, NULL);
+    // Clear the array buffer
+    std::fill_n(data_buffer, sizeof(data_buffer), NULL);
   }
 }
 
