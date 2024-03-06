@@ -7,6 +7,7 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
+#include <queue>
 
 // LoRaWAN Settings
 #define  LMIC_DEBUG_LEVEL = 1 
@@ -52,20 +53,15 @@ int msg_send_Eny = 0;                        // Counter
 bool flag = false;
 
 // MQTT variables
-const int arraySize_Data = 9;                          // Number of messages for Data topic
-const char* messageQueue_Data[arraySize_Data];         // Message queue
-int msg_recived_Data = 0;                              // Counter
-const int arraySize_Eny = 11;                          // Number of messages for Eny topic
-const char* messageQueue_Eny[arraySize_Eny];           // Message queue
-int msg_recived_Eny = 0;                               // Counter
+std::queue<std::string>messageQueue;         // Message queue
 
 
 // Pin map
 const lmic_pinmap lmic_pins = {
-    .nss = 18,
-    .rxtx = LMIC_UNUSED_PIN,
-    .rst = 14, 
-    .dio = {26, 35, 34},
+  .nss = 18,
+  .rxtx = LMIC_UNUSED_PIN,
+  .rst = 14, 
+  .dio = {26, 35, 34},
 };
 
 //OLED Settings
@@ -82,8 +78,8 @@ const char* WIFI_PASSWORD = "senhaforte123";
 
 // MQTT Settings
 PicoMQTT::Client mqtt(
-  "192.168.4.1",          // broker address (or IP)
-  1883,                   // broker port (defaults to 1883)
+  "192.168.4.1",          // broker address
+  1883,                   // broker port
   "esp-client",           // Client ID
   "bob",                  // MQTT username
   "password"              // MQTT password
@@ -106,12 +102,6 @@ void setup() {
   // Setup LoRa
   setupLoRaWAN();
 
-  // Setup OLED
-  pinMode(OLED_RST, OUTPUT);
-  digitalWrite(OLED_RST, LOW);
-  delay(20);
-  digitalWrite(OLED_RST, HIGH);
-
   // Initialize the OLED display using Wire library
   Wire.begin(OLED_SDA, OLED_SCL);
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false)) { // Address 0x3C for 128x32
@@ -123,42 +113,11 @@ void setup() {
   mqtt.subscribe("#", [](const char * topic, const char * payload) {
 
     Serial.println(topic);
+    Serial.println(ESP.getFreeHeap());
 
-    // Recive the first 9 packets
-    if((strcmp(topic, "MQTT_RT_DATA") == 0) || (strcmp(topic, "MQTT_TELEIND") == 0)){
+    messageQueue.push(std::string(payload));
+    Serial.println(messageQueue.front().c_str());
 
-      // Put the message in the queue
-      messageQueue_Data[msg_recived_Data] = (char*)malloc(strlen(payload) + 1);
-      if(messageQueue_Data[msg_recived_Data] != nullptr) {
-        messageQueue_Data[msg_recived_Data] = strdup(payload);
-      }
-
-      // Increase the counter on message received
-      msg_recived_Data++;
-
-      // Reset the queue to the begin
-      if(msg_recived_Data == arraySize_Data){
-        msg_recived_Data = 0;
-      }
-    
-    // Recive the rest
-    }else if (strcmp(topic, "MQTT_ENY_NOW") == 0){
-
-      // Put message in the queue
-      messageQueue_Eny[msg_recived_Eny] = (char*)malloc(strlen(payload) + 1);
-      if(messageQueue_Eny[msg_recived_Eny] != nullptr){
-        messageQueue_Eny[msg_recived_Eny] = strdup(payload);
-      }
-
-      // Increasse queue counter
-      msg_recived_Eny++;
-
-      // Reset the queue
-      if(msg_recived_Eny == arraySize_Eny){
-        msg_recived_Eny == 0;
-      }
-    }
-      
   });
 
   // Start mqtt broker
@@ -172,67 +131,15 @@ void loop() {
 
 }
 
-// Check if the message queue is empty
-bool isMessageQueueEmpty(const char* messageQueue[], size_t arraySize) {
-  for (size_t i = 0; i < arraySize; ++i) {
-    if (messageQueue[i] != nullptr && messageQueue[i][0] != '\0') {
-      return false;
-    }
-  }
-  return true;
-}
-
 // Build the packet
-void buildPacket_DATA() {
+void buildPacket() {
 
-  Serial.println("DATA");
-
-  // Get the message
-  for(int i=0; i<strlen(messageQueue_Data[msg_send_Data]); i++) {
-    data_buffer[i] = messageQueue_Data[msg_send_Data][i];
+  String message = messageQueue.front().c_str();
+  messageQueue.pop();
+  for(int i = 0; i < message.length(); i++) {
+    data_buffer[i] = message[i];
   }
 
-  // Free the memory
-  free((void*)messageQueue_Data[msg_send_Data]);
-  messageQueue_Data[msg_send_Data] = nullptr;
-
-  // Increasse the counter
-  msg_send_Data++;
-
-  // Resset the counter if it reaches the array size
-  if(msg_send_Data == arraySize_Data) {
-    msg_send_Data = 0;
-  }
-
-}
-
-void buildPacket_ENY(){
-
-  Serial.println("ENY");
-  
-  // Get the message
-  for(int i=0; i<strlen(messageQueue_Eny[msg_send_Eny]); i++){
-    data_buffer[i] = messageQueue_Eny[msg_send_Eny][i];
-  }
-
-  // Free the memory
-  free((void*)messageQueue_Eny[msg_send_Eny]);
-  messageQueue_Eny[msg_send_Eny] = nullptr;
-
-  // Increasse the counter
-  msg_send_Eny++;
-
-  if(msg_send_Eny == arraySize_Eny){
-    msg_send_Eny = 0;
-  }
-}
-
-// Clear OLED
-void OledClear() {
-  display.clearDisplay();
-  display.setTextColor(WHITE);
-  display.setTextSize(1);
-  display.setCursor(0,0);
 }
 
 // Event handler
@@ -325,12 +232,9 @@ void do_send(osjob_t* j) {
   // Check if there is not a current TX/RX job running
   if (!(LMIC.opmode & OP_TXRXPEND)) {
 
-    // Check if the message queue is empty
-    if((!isMessageQueueEmpty(messageQueue_Data, arraySize_Data))){
-      buildPacket_DATA();
-
-    }else if(!isMessageQueueEmpty(messageQueue_Eny, arraySize_Eny)){
-      buildPacket_ENY();
+    // Build packet
+    if(!messageQueue.empty()){
+      buildPacket();
     }
 
     // Send Message
