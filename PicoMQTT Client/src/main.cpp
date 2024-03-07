@@ -46,6 +46,7 @@ void os_getDevKey (u1_t* buf) { }
 // Lora variables
 static osjob_t sendjob;                      // Send job
 const int buffer_size = 160;                 // Buffer size
+std::vector<uint8_t> data_vector;            // Data vector
 uint8_t data_buffer[buffer_size];            // Data buffer
 const unsigned TX_INTERVAL = 10;             // Interval between messages
 int msg_send_Data = 0;                       // Counter
@@ -138,6 +139,7 @@ void buildPacket() {
   messageQueue.pop();
   for(int i = 0; i < message.length(); i++) {
     data_buffer[i] = message[i];
+    data_vector.push_back(message[i]);
   }
 
 }
@@ -238,12 +240,13 @@ void do_send(osjob_t* j) {
     }
 
     // Send Message
-    Serial.println((char*)data_buffer);
-    LMIC_setTxData2(1, data_buffer, sizeof(data_buffer), 0);
+    Serial.println(data_vector.data());
+    LMIC_setTxData2(1, data_vector.data(), data_vector.size(), 0);
     Serial.println("Packet queued");
     
     // Clear the array buffer
     std::fill_n(data_buffer, sizeof(data_buffer), NULL);
+    std::fill_n(data_vector.begin(), data_vector.size(), NULL);
   }
 }
 
