@@ -51,9 +51,6 @@ uint8_t data_buffer[buffer_size];            // Data buffer
 const unsigned TX_INTERVAL = 10;             // Interval between messages
 int msg_send_Data = 0;                       // Counter
 int msg_send_Eny = 0;                        // Counter
-bool flag = false;
-
-// MQTT variables
 std::queue<std::string>messageQueue;         // Message queue
 
 
