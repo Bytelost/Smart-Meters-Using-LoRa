@@ -45,14 +45,9 @@ void os_getDevKey (u1_t* buf) { }
 
 // Lora variables
 static osjob_t sendjob;                      // Send job
-const int buffer_size = 160;                 // Buffer size
 std::vector<uint8_t> data_vector;            // Data vector
-uint8_t data_buffer[buffer_size];            // Data buffer
-const unsigned TX_INTERVAL = 10;             // Interval between messages
-int msg_send_Data = 0;                       // Counter
-int msg_send_Eny = 0;                        // Counter
 std::queue<std::string>messageQueue;         // Message queue
-
+const unsigned TX_INTERVAL = 10;             // Interval between messages
 
 // Pin map
 const lmic_pinmap lmic_pins = {
@@ -110,11 +105,9 @@ void setup() {
   // Subscribe to all topics
   mqtt.subscribe("#", [](const char * topic, const char * payload) {
 
-    Serial.println(topic);
-    Serial.println(ESP.getFreeHeap());
-
+    // Push message to queue
     messageQueue.push(std::string(payload));
-    Serial.println(messageQueue.front().c_str());
+    Serial.println(messageQueue.back().c_str());
 
   });
 
@@ -132,10 +125,10 @@ void loop() {
 // Build the packet
 void buildPacket() {
 
+  // Create the packet with the message
   String message = messageQueue.front().c_str();
   messageQueue.pop();
   for(int i = 0; i < message.length(); i++) {
-    data_buffer[i] = message[i];
     data_vector.push_back(message[i]);
   }
 
@@ -171,7 +164,7 @@ void onEvent (ev_t ev) {
       Serial.println(F("EV_REJOIN_FAILED"));
       break;
     case EV_TXCOMPLETE:
-      //Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
+      Serial.println(F("EV_TXCOMPLETE (includes waiting for RX windows)"));
       if (LMIC.txrxFlags & TXRX_ACK)
         Serial.println(F("Received ack"));
       if (LMIC.dataLen) {
@@ -207,7 +200,7 @@ void onEvent (ev_t ev) {
       ||    break;
     */
     case EV_TXSTART:
-      //Serial.println(F("EV_TXSTART"));
+      Serial.println(F("EV_TXSTART"));
       break;
     case EV_TXCANCELED:
       Serial.println(F("EV_TXCANCELED"));
@@ -237,13 +230,14 @@ void do_send(osjob_t* j) {
     }
 
     // Send Message
-    Serial.println(data_vector.data());
+    Serial.println((char*)data_vector.data());
     LMIC_setTxData2(1, data_vector.data(), data_vector.size(), 0);
     Serial.println("Packet queued");
+    size_t aux = data_vector.size() * sizeof(uint8_t);
+    Serial.printf("Mesaage size: %d\n", aux);
     
     // Clear the array buffer
-    std::fill_n(data_buffer, sizeof(data_buffer), NULL);
-    std::fill_n(data_vector.begin(), data_vector.size(), NULL);
+    data_vector.clear();
   }
 }
 
