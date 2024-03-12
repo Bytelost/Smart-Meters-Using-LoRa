@@ -7,6 +7,7 @@
 #include <lmic.h>
 #include <hal/hal.h>
 #include <SPI.h>
+#include <queue>
 
 #define  LMIC_DEBUG_LEVEL = 1 
 #define CFG_au915
@@ -39,10 +40,11 @@ void os_getArtEui (u1_t* buf) { }
 void os_getDevEui (u1_t* buf) { }
 void os_getDevKey (u1_t* buf) { }
 
-// Message to send
-static uint8_t txBuffer[12] = "Hello World";
-
-static osjob_t sendjob;
+// Lora variables
+static osjob_t sendjob;                      // Send job
+std::vector<uint8_t> data_vector;            // Data vector
+std::queue<std::string>messageQueue;         // Message queue
+const unsigned TX_INTERVAL = 10;             // Interval between messages
 
 // LoRa transmission time
 const unsigned TX_INTERVAL = 30;
@@ -129,7 +131,10 @@ void setup() {
 
   // Subscribe to MQTT topics
   mqtt.subscribe("#/", [](const char * topic, const char * payload) {
-      Serial.printf("Received message in topic '%s': %s\n", topic, payload);
+    
+    // Push message to queue
+    messageQueue.push(std::string(payload));
+    Serial.println(messageQueue.back().c_str());
       
   });
 
@@ -138,6 +143,7 @@ void setup() {
 
 }
 
+// Main loop
 void loop() {
   mqtt.loop();
 
@@ -151,6 +157,7 @@ void loop() {
 
 }
 
+// Clear the OLED
 void OledClear() {
   display.clearDisplay();
   display.setTextColor(WHITE);
@@ -158,6 +165,7 @@ void OledClear() {
   display.setCursor(0,0);
 }
 
+// Show message in the OLED
 void ShowMsg() {
   OledClear();
   int num = WiFi.softAPgetStationNum();
@@ -168,11 +176,16 @@ void ShowMsg() {
   display.display();
 }
 
-void printHex2(unsigned v) {
-  v &= 0xff;
-  if (v < 16)
-    Serial.print('0');
-  Serial.print(v, HEX);
+// Build the packet
+void buildPacket() {
+
+  // Create the packet with the message
+  String message = messageQueue.front().c_str();
+  messageQueue.pop();
+  for(int i = 0; i < message.length(); i++) {
+    data_vector.push_back(message[i]);
+  }
+
 }
 
 void onEvent (ev_t ev) {
@@ -260,18 +273,23 @@ void onEvent (ev_t ev) {
 
 void do_send(osjob_t* j) {  
   // Check if there is not a current TX/RX job running
-  if (LMIC.opmode & OP_TXRXPEND)
-  {
-    //LoraStatus = "OP_TXRXPEND, not sending";
+  if (!(LMIC.opmode & OP_TXRXPEND)){
+
+    // Build packet
+    if(!messageQueue.empty()){
+      buildPacket();
+    }
+
+    // Send Message
+    Serial.println((char*)data_vector.data());
+    LMIC_setTxData2(1, data_vector.data(), data_vector.size(), 0);
+    Serial.println("Packet queued");
+    size_t aux = data_vector.size() * sizeof(uint8_t);
+    Serial.printf("Mesaage size: %d\n", aux);
+    
+    // Clear the array buffer
+    data_vector.clear();
   }
-  else
-  { 
-      // Send Message 
-      LMIC_setTxData2(1, txBuffer, sizeof(txBuffer), 0);
-      Serial.println("Packet queued");
-      //LoraStatus = "Packet queued";
-  }
-  // Next TX is scheduled after TX_COMPLETE event.
 }
 
 
