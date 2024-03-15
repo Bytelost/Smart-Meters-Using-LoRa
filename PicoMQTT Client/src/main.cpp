@@ -8,6 +8,7 @@
 #include <hal/hal.h>
 #include <SPI.h>
 #include <queue>
+#include <cstring>
 
 // LoRaWAN Settings
 #define  LMIC_DEBUG_LEVEL = 1 
@@ -108,9 +109,13 @@ void setup() {
   // Subscribe to all topics
   mqtt.subscribe("#", [](const char * topic, const char * payload) {
 
-    // Push message to queue
-    messageQueue.push(std::string(payload));
-    Serial.println(messageQueue.back().c_str());
+    // Check if the topic is the one we want
+    if(strcmp(topic, "MQTT_RT_DATA") == 0) {
+
+      // Push message to queue
+      messageQueue.push(std::string(payload));
+      Serial.println(messageQueue.back().c_str());
+    }
 
   });
 
@@ -134,7 +139,6 @@ void buildPacket() {
   for(int i = 0; i < message.length(); i++) {
     data_vector.push_back(message[i]);
   }
-
 }
 
 // Event handler
@@ -233,7 +237,6 @@ void do_send(osjob_t* j) {
     }
 
     // Send Message
-    Serial.println((char*)data_vector.data());
     LMIC_setTxData2(1, data_vector.data(), data_vector.size(), 0);
     Serial.println("Packet queued");
     size_t aux = data_vector.size() * sizeof(uint8_t);
