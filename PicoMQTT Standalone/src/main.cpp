@@ -114,7 +114,7 @@ void setup() {
   setupLoRaWAN();
 
   // Setup OLED
-  pinMode(OLED_RST, OUTPUT);
+  pinMode(OLED_RST, OUTPUT);  
   digitalWrite(OLED_RST, LOW);
   delay(20);
   digitalWrite(OLED_RST, HIGH);
@@ -132,9 +132,13 @@ void setup() {
   // Subscribe to MQTT topics
   mqtt.subscribe("#/", [](const char * topic, const char * payload) {
     
-    // Push message to queue
-    messageQueue.push(std::string(payload));
-    Serial.println(messageQueue.back().c_str());
+    // Check if the topic is the one we want
+    if(strcmp(topic, "MQTT_RT_DATA") == 0) {
+
+      // Push message to queue
+      messageQueue.push(std::string(payload));
+      Serial.println(messageQueue.back().c_str());
+    }
       
   });
 
@@ -280,10 +284,15 @@ void do_send(osjob_t* j) {
       buildPacket();
     }
 
+    // Set data rate and transmit power for uplink
+    LMIC_setDrTxpow(DR_SF10, LORA_GAIN);
+
     // Send Message
     Serial.println((char*)data_vector.data());
     LMIC_setTxData2(1, data_vector.data(), data_vector.size(), 0);
     Serial.println("Packet queued");
+
+    // Print message size
     size_t aux = data_vector.size() * sizeof(uint8_t);
     Serial.printf("Mesaage size: %d\n", aux);
     
@@ -382,10 +391,6 @@ void setupLoRaWAN()
 
   // TTN uses SF9 for its RX2 window.
   LMIC.dn2Dr = DR_SF9;
-
-  // Set data rate and transmit power for uplink
-  LMIC_setDrTxpow(DR_SF10, LORA_GAIN);
-
 
   // Start job
   do_send(&sendjob);
