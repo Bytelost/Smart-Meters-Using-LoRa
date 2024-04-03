@@ -11,7 +11,7 @@
 #include <cstring>
 
 // LoRaWAN Settings
-#define  LMIC_DEBUG_LEVEL = 1 
+#define  LMIC_DEBUG_LEVEL = 2 
 #define CFG_au915
 #define LORA_GAIN 14 
 
@@ -85,6 +85,9 @@ void setup() {
   Serial.begin(9600);
   Serial.println("Starting...");
   
+  // Setup LoRa
+  setupLoRaWAN();
+
   // Setup WiFi
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -93,18 +96,13 @@ void setup() {
     Serial.print(".");
   }
 
-  // Setup LoRa
-  setupLoRaWAN();
 
   // Initialize the OLED display using Wire library
   Wire.begin(OLED_SDA, OLED_SCL);
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3c, false, false)) { // Address 0x3C for 128x32
       Serial.println(F("SSD1306 allocation failed"));
       for(;;); // Don't proceed, loop forever
-  } 
-
-  // Set data rate and transmit power for uplink
-  LMIC_setDrTxpow(DR_SF9, LORA_GAIN);
+  }
 
   // Subscribe to all topics
   mqtt.subscribe("#", [](const char * topic, const char * payload) {
@@ -231,10 +229,22 @@ void do_send(osjob_t* j) {
   // Check if there is not a current TX/RX job running
   if (!(LMIC.opmode & OP_TXRXPEND)) {
 
+    // Set data rate and transmit power for uplink
+    LMIC_setDrTxpow(DR_SF9, LORA_GAIN);
+
     // Build packet
     if(!messageQueue.empty()){
       buildPacket();
     }
+
+    LMIC_disableChannel(8);
+    //LMIC_disableChannel(9);  
+    LMIC_disableChannel(10);
+    LMIC_disableChannel(11);
+    LMIC_disableChannel(12);
+    LMIC_disableChannel(13);
+    LMIC_disableChannel(14);
+    LMIC_disableChannel(15);
 
     // Send Message
     LMIC_setTxData2(1, data_vector.data(), data_vector.size(), 0);
