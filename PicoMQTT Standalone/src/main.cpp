@@ -46,9 +46,6 @@ std::vector<uint8_t> data_vector;            // Data vector
 std::queue<std::string>messageQueue;         // Message queue
 const unsigned TX_INTERVAL = 10;             // Interval between messages
 
-// LoRa transmission time
-const unsigned TX_INTERVAL = 30;
-
 // Pin map
 const lmic_pinmap lmic_pins = {
     .nss = 18,
@@ -130,7 +127,7 @@ void setup() {
   ShowMsg();  
 
   // Subscribe to MQTT topics
-  mqtt.subscribe("#/", [](const char * topic, const char * payload) {
+  mqtt.subscribe("#", [](const char * topic, const char * payload) {
     
     // Check if the topic is the one we want
     if(strcmp(topic, "MQTT_RT_DATA") == 0) {
