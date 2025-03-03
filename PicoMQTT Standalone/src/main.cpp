@@ -8,6 +8,7 @@
 #include <hal/hal.h>
 #include <SPI.h>
 #include <queue>
+#include <bitset>
 
 #define  LMIC_DEBUG_LEVEL = 1 
 #define CFG_au915
@@ -180,11 +181,18 @@ void ShowMsg() {
 // Build the packet
 void buildPacket() {
 
-  // Create the packet with the message
+  // Extract the message
   String message = messageQueue.front().c_str();
   messageQueue.pop();
-  for(int i = 0; i < message.length(); i++) {
-    data_vector.push_back(message[i]);
+
+  // Convert the message bo binary
+  for(char& c : message){
+    std::bitset<8> binary(c);
+
+    // Push the message to be sent
+    for(size_t i = 0; i < binary.size(); ++i){
+      data_vector.push_back(binary[i]);
+    }
   }
 
 }
